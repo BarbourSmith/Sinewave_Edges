@@ -1,13 +1,237 @@
 {
-    "atomType": "Molecule",
-    "x": 0,
-    "y": 0,
-    "uniqueID": "id-584",
-    "name": "Sinewave_Edges",
-    "topLevel": true,
-    "allAtoms": [],
-    "allConnectors": [],
-    "unitsKey": "Unitless",
-    "fileTypeVersion": 1,
-    "filetypeVersion": 1
+  "atomType": "Molecule",
+  "x": 0,
+  "y": 0,
+  "uniqueID": "id-584",
+  "name": "Sinewave_Edges",
+  "ioValues": [
+    {
+      "name": "Period",
+      "ioValue": 10
+    },
+    {
+      "name": "Amplitude",
+      "ioValue": 1,
+      "currentEquation": "1"
+    },
+    {
+      "name": "2D_Shape",
+      "ioValue": "__GEOMETRY_INPUT__"
+    }
+  ],
+  "topLevel": true,
+  "allAtoms": [
+    {
+      "atomType": "Output",
+      "x": 0.98,
+      "y": 0.5,
+      "uniqueID": "id-585",
+      "ioValues": [
+        {
+          "name": "number or geometry",
+          "ioValue": "__GEOMETRY_INPUT__"
+        }
+      ]
+    },
+    {
+      "atomType": "Code",
+      "x": 0.5456349206349206,
+      "y": 0.6462395543175488,
+      "uniqueID": "id-587",
+      "ioValues": [
+        {
+          "name": "shape",
+          "ioValue": "__GEOMETRY_INPUT__"
+        },
+        {
+          "name": "period",
+          "ioValue": 10
+        },
+        {
+          "name": "amplitude",
+          "ioValue": 1
+        }
+      ],
+      "interpreterVersion": 1,
+      "code": "/**\n * Sine-Wave Edge\n *\n * Takes a 2D shape (e.g. a circle) and displaces its outline in and out along\n * the local outward normal following a sine wave. The result is the same shape\n * with a wavy, scalloped edge.\n *\n * The wave is parametrised by true arc length around the perimeter, so the\n * period and amplitude are constant in millimetres regardless of the shape.\n * Because the perimeter is generally not an exact multiple of the period, the\n * wave cannot meet itself smoothly — that single discontinuity (the \"seam\") is\n * forced to the bottom of the shape, i.e. the -y direction.\n *\n * @param shape     A 2D geometry to add the wavy edge to (wire from another atom)\n * @param period    Wavelength of the sine wave along the edge, in mm\n * @param amplitude Peak in/out displacement of the edge, in mm\n */\nfunction run(\n  shape: Assembly | undefined = undefined,\n  period: number = 10,\n  amplitude: number = 2,\n): Assembly {\n  if (!shape) {\n    throw new Error(\"Connect a 2D shape to the 'shape' input.\");\n  }\n\n  const per = Math.max(period, 1e-6); // guard against divide-by-zero\n\n  // Turn one flat replicad Drawing into a wavy-edged Drawing.\n  const makeWavy = (drawing: any): any => {\n    // Get the outline of the shape as a single closed wire.\n    const sketch = drawing.sketchOnPlane();\n    const wire = sketch.face().outerWire();\n    const perimeter = wire.length;\n\n    // Sample the outline densely enough to resolve every wave crest.\n    const pointsPerPeriod = 32;\n    let n = Math.ceil((perimeter / per) * pointsPerPeriod);\n    n = Math.max(120, Math.min(n, 6000));\n\n    // pointAt() takes a normalised parameter 0..1 around the closed wire.\n    // We stop before 1.0 so we don't duplicate the start point.\n    const raw: { x: number; y: number }[] = [];\n    for (let i = 0; i < n; i++) {\n      const v = wire.pointAt(i / n);\n      raw.push({ x: v.x, y: v.y });\n    }\n\n    // Rotate the sample list so it starts at the bottom-most point. This puts\n    // the wave's seam (where it wraps and must jump) in the -y direction.\n    let startIdx = 0;\n    let minY = Infinity;\n    for (let i = 0; i < n; i++) {\n      if (raw[i].y < minY) {\n        minY = raw[i].y;\n        startIdx = i;\n      }\n    }\n    const pts = raw.slice(startIdx).concat(raw.slice(0, startIdx));\n\n    // Winding order (signed area) tells us which normal direction is \"outward\".\n    let area2 = 0;\n    for (let i = 0; i < n; i++) {\n      const a = pts[i];\n      const b = pts[(i + 1) % n];\n      area2 += a.x * b.y - b.x * a.y;\n    }\n    const ccw = area2 > 0;\n\n    // Cumulative arc length from the seam, used to drive the sine phase.\n    const s = new Array<number>(n);\n    s[0] = 0;\n    for (let i = 1; i < n; i++) {\n      s[i] = s[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);\n    }\n\n    // Displace each point along its outward normal by amplitude * sin(2π·s/λ).\n    const out: [number, number][] = [];\n    for (let i = 0; i < n; i++) {\n      const prev = pts[(i - 1 + n) % n];\n      const next = pts[(i + 1) % n];\n      let tx = next.x - prev.x;\n      let ty = next.y - prev.y;\n      const tl = Math.hypot(tx, ty) || 1;\n      tx /= tl;\n      ty /= tl;\n\n      // Rotate the tangent 90° to the exterior side of the curve.\n      const nx = ccw ? ty : -ty;\n      const ny = ccw ? -tx : tx;\n\n      const disp = amplitude * Math.sin((2 * Math.PI * s[i]) / per);\n      out.push([pts[i].x + nx * disp, pts[i].y + ny * disp]);\n    }\n\n    // Rebuild the closed 2D outline. The seam is out[n-1] -> out[0] at the\n    // bottom, where the displacement returns to 0 so the jump is clean.\n    let pen = replicad.draw(out[0]);\n    for (let i = 1; i < out.length; i++) {\n      pen = pen.lineTo(out[i]);\n    }\n    return pen.close();\n  };\n\n  // Apply to every 2D leaf in the input, leaving anything non-2D untouched.\n  const result = new Assembly(shape);\n  result.onLeafs((leaf) => {\n    const g = leaf.geometry;\n    if (g && typeof g.sketchOnPlane === \"function\") {\n      leaf.geometry = makeWavy(g);\n      leaf.tags = [...(leaf.tags ?? []), \"sine-wave-edge\"];\n    }\n    return leaf;\n  });\n\n  return result;\n}",
+      "compiledCode": "\"use strict\";\n/**\n * Sine-Wave Edge\n *\n * Takes a 2D shape (e.g. a circle) and displaces its outline in and out along\n * the local outward normal following a sine wave. The result is the same shape\n * with a wavy, scalloped edge.\n *\n * The wave is parametrised by true arc length around the perimeter, so the\n * period and amplitude are constant in millimetres regardless of the shape.\n * Because the perimeter is generally not an exact multiple of the period, the\n * wave cannot meet itself smoothly — that single discontinuity (the \"seam\") is\n * forced to the bottom of the shape, i.e. the -y direction.\n *\n * @param shape     A 2D geometry to add the wavy edge to (wire from another atom)\n * @param period    Wavelength of the sine wave along the edge, in mm\n * @param amplitude Peak in/out displacement of the edge, in mm\n */\nfunction run(shape = undefined, period = 10, amplitude = 2) {\n    if (!shape) {\n        throw new Error(\"Connect a 2D shape to the 'shape' input.\");\n    }\n    const per = Math.max(period, 1e-6); // guard against divide-by-zero\n    // Turn one flat replicad Drawing into a wavy-edged Drawing.\n    const makeWavy = (drawing) => {\n        // Get the outline of the shape as a single closed wire.\n        const sketch = drawing.sketchOnPlane();\n        const wire = sketch.face().outerWire();\n        const perimeter = wire.length;\n        // Sample the outline densely enough to resolve every wave crest.\n        const pointsPerPeriod = 32;\n        let n = Math.ceil((perimeter / per) * pointsPerPeriod);\n        n = Math.max(120, Math.min(n, 6000));\n        // pointAt() takes a normalised parameter 0..1 around the closed wire.\n        // We stop before 1.0 so we don't duplicate the start point.\n        const raw = [];\n        for (let i = 0; i < n; i++) {\n            const v = wire.pointAt(i / n);\n            raw.push({ x: v.x, y: v.y });\n        }\n        // Rotate the sample list so it starts at the bottom-most point. This puts\n        // the wave's seam (where it wraps and must jump) in the -y direction.\n        let startIdx = 0;\n        let minY = Infinity;\n        for (let i = 0; i < n; i++) {\n            if (raw[i].y < minY) {\n                minY = raw[i].y;\n                startIdx = i;\n            }\n        }\n        const pts = raw.slice(startIdx).concat(raw.slice(0, startIdx));\n        // Winding order (signed area) tells us which normal direction is \"outward\".\n        let area2 = 0;\n        for (let i = 0; i < n; i++) {\n            const a = pts[i];\n            const b = pts[(i + 1) % n];\n            area2 += a.x * b.y - b.x * a.y;\n        }\n        const ccw = area2 > 0;\n        // Cumulative arc length from the seam, used to drive the sine phase.\n        const s = new Array(n);\n        s[0] = 0;\n        for (let i = 1; i < n; i++) {\n            s[i] = s[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);\n        }\n        // Displace each point along its outward normal by amplitude * sin(2π·s/λ).\n        const out = [];\n        for (let i = 0; i < n; i++) {\n            const prev = pts[(i - 1 + n) % n];\n            const next = pts[(i + 1) % n];\n            let tx = next.x - prev.x;\n            let ty = next.y - prev.y;\n            const tl = Math.hypot(tx, ty) || 1;\n            tx /= tl;\n            ty /= tl;\n            // Rotate the tangent 90° to the exterior side of the curve.\n            const nx = ccw ? ty : -ty;\n            const ny = ccw ? -tx : tx;\n            const disp = amplitude * Math.sin((2 * Math.PI * s[i]) / per);\n            out.push([pts[i].x + nx * disp, pts[i].y + ny * disp]);\n        }\n        // Rebuild the closed 2D outline. The seam is out[n-1] -> out[0] at the\n        // bottom, where the displacement returns to 0 so the jump is clean.\n        let pen = replicad.draw(out[0]);\n        for (let i = 1; i < out.length; i++) {\n            pen = pen.lineTo(out[i]);\n        }\n        return pen.close();\n    };\n    // Apply to every 2D leaf in the input, leaving anything non-2D untouched.\n    const result = new Assembly(shape);\n    result.onLeafs((leaf) => {\n        const g = leaf.geometry;\n        if (g && typeof g.sketchOnPlane === \"function\") {\n            leaf.geometry = makeWavy(g);\n            leaf.tags = [...(leaf.tags ?? []), \"sine-wave-edge\"];\n        }\n        return leaf;\n    });\n    return result;\n}\n"
+    },
+    {
+      "atomType": "Input",
+      "x": 0.025384615384615384,
+      "y": 0.49860724233983283,
+      "uniqueID": "id-592",
+      "name": "Period"
+    },
+    {
+      "atomType": "Input",
+      "x": 0.025384615384615384,
+      "y": 0.6267409470752089,
+      "uniqueID": "id-595",
+      "name": "Amplitude"
+    },
+    {
+      "atomType": "Input",
+      "x": 0.025384615384615384,
+      "y": 0.3593314763231198,
+      "uniqueID": "id-598",
+      "name": "2D_Shape",
+      "type": "geometry"
+    },
+    {
+      "atomType": "GitHubMolecule",
+      "x": 0.39616402116402116,
+      "y": 0.8105849582172702,
+      "uniqueID": "id-611",
+      "name": "Rounded_Rectangle",
+      "ioValues": [
+        {
+          "name": "X_Length",
+          "ioValue": 500
+        },
+        {
+          "name": "Y_Length",
+          "ioValue": 500,
+          "currentEquation": "500"
+        },
+        {
+          "name": "Radius",
+          "ioValue": 100,
+          "currentEquation": "100"
+        }
+      ],
+      "topLevel": false,
+      "allAtoms": [
+        {
+          "atomType": "Output",
+          "x": 0.98,
+          "y": 0.5,
+          "uniqueID": "id-606",
+          "ioValues": [
+            {
+              "name": "number or geometry",
+              "ioValue": "__GEOMETRY_INPUT__"
+            }
+          ]
+        },
+        {
+          "atomType": "Input",
+          "x": 0.025384615384615384,
+          "y": 0.15384615384615385,
+          "uniqueID": "id-607",
+          "name": "X_Length"
+        },
+        {
+          "atomType": "Input",
+          "x": 0.025384615384615384,
+          "y": 0.24615384615384617,
+          "uniqueID": "id-608",
+          "name": "Y_Length"
+        },
+        {
+          "atomType": "Input",
+          "x": 0.025384615384615384,
+          "y": 0.3384615384615385,
+          "uniqueID": "id-609",
+          "name": "Radius"
+        },
+        {
+          "atomType": "Code",
+          "x": 0.49603174603174605,
+          "y": 0.637883008356546,
+          "uniqueID": "id-610",
+          "ioValues": [
+            {
+              "name": "width",
+              "ioValue": 500
+            },
+            {
+              "name": "height",
+              "ioValue": 500
+            },
+            {
+              "name": "cornerRadius",
+              "ioValue": 100
+            }
+          ],
+          "interpreterVersion": 1,
+          "code": "function run(\n  width: number = 40,\n  height: number = 30,\n  cornerRadius: number = 5,\n): Assembly {\n  // Create a 2D rounded rectangle sketch\n  const roundedRect = replicad.drawRoundedRectangle(width, height, cornerRadius);\n\n  return new Assembly({\n    geometry: roundedRect,\n    tags: [\"rounded-rectangle\", \"2d\"],\n    bom: [`Rounded rectangle ${width}×${height} mm, r=${cornerRadius} mm`],\n  });\n}",
+          "compiledCode": "\"use strict\";\nfunction run(width = 40, height = 30, cornerRadius = 5) {\n    // Create a 2D rounded rectangle sketch\n    const roundedRect = replicad.drawRoundedRectangle(width, height, cornerRadius);\n    return new Assembly({\n        geometry: roundedRect,\n        tags: [\"rounded-rectangle\", \"2d\"],\n        bom: [`Rounded rectangle ${width}×${height} mm, r=${cornerRadius} mm`],\n    });\n}\n"
+        }
+      ],
+      "allConnectors": [
+        {
+          "ap2Name": "width",
+          "ap1ID": "id-607",
+          "ap2ID": "id-610"
+        },
+        {
+          "ap2Name": "height",
+          "ap1ID": "id-608",
+          "ap2ID": "id-610"
+        },
+        {
+          "ap2Name": "cornerRadius",
+          "ap1ID": "id-609",
+          "ap2ID": "id-610"
+        },
+        {
+          "ap2Name": "number or geometry",
+          "ap1ID": "id-610",
+          "ap2ID": "id-606"
+        }
+      ],
+      "parentRepo": {
+        "lastFoundGit": "2026-07-19T02:23:39.092Z",
+        "privateRepo": false,
+        "repoName": "Rounded_Rectangle",
+        "dateCreated": "2026-06-24T22:02:13Z",
+        "likes": 0,
+        "readMe": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/README.md?sanitize=true",
+        "yyyy": 2026,
+        "topMoleculeID": "id-460774",
+        "githubMoleculesUsed": [],
+        "html_url": "https://github.com/BarbourSmith/Rounded_Rectangle",
+        "topics": [],
+        "parentRepo": null,
+        "forks": 0,
+        "dateModified": "739791",
+        "ranking": 2.1,
+        "searchField": "rounded_rectangle barboursmith creates a 2d rectangle with rounded corners  ",
+        "owner": "BarbourSmith",
+        "description": "Creates a 2D rectangle with rounded corners ",
+        "contentURL": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/project.abundance?sanitize=true",
+        "svgURL": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/project.svg?sanitize=true",
+        "isLocal": false
+      },
+      "unitsKey": "Unitless",
+      "fileTypeVersion": 1,
+      "lastReloadedFromGithubAt": 1784435795517
+    }
+  ],
+  "allConnectors": [
+    {
+      "ap2Name": "number or geometry",
+      "ap1ID": "id-587",
+      "ap2ID": "id-585"
+    },
+    {
+      "ap2Name": "period",
+      "ap1ID": "id-592",
+      "ap2ID": "id-587"
+    },
+    {
+      "ap2Name": "amplitude",
+      "ap1ID": "id-595",
+      "ap2ID": "id-587"
+    },
+    {
+      "ap2Name": "shape",
+      "ap1ID": "id-611",
+      "ap2ID": "id-587"
+    }
+  ],
+  "unitsKey": "Unitless",
+  "fileTypeVersion": 1,
+  "filetypeVersion": 1
 }
