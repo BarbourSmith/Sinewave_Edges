@@ -77,136 +77,6 @@
       "uniqueID": "id-598",
       "name": "2D_Shape",
       "type": "geometry"
-    },
-    {
-      "atomType": "GitHubMolecule",
-      "x": 0.39616402116402116,
-      "y": 0.8105849582172702,
-      "uniqueID": "id-611",
-      "name": "Rounded_Rectangle",
-      "ioValues": [
-        {
-          "name": "X_Length",
-          "ioValue": 500
-        },
-        {
-          "name": "Y_Length",
-          "ioValue": 500,
-          "currentEquation": "500"
-        },
-        {
-          "name": "Radius",
-          "ioValue": 100,
-          "currentEquation": "100"
-        }
-      ],
-      "topLevel": false,
-      "allAtoms": [
-        {
-          "atomType": "Output",
-          "x": 0.98,
-          "y": 0.5,
-          "uniqueID": "id-606",
-          "ioValues": [
-            {
-              "name": "number or geometry",
-              "ioValue": "__GEOMETRY_INPUT__"
-            }
-          ]
-        },
-        {
-          "atomType": "Input",
-          "x": 0.025384615384615384,
-          "y": 0.15384615384615385,
-          "uniqueID": "id-607",
-          "name": "X_Length"
-        },
-        {
-          "atomType": "Input",
-          "x": 0.025384615384615384,
-          "y": 0.24615384615384617,
-          "uniqueID": "id-608",
-          "name": "Y_Length"
-        },
-        {
-          "atomType": "Input",
-          "x": 0.025384615384615384,
-          "y": 0.3384615384615385,
-          "uniqueID": "id-609",
-          "name": "Radius"
-        },
-        {
-          "atomType": "Code",
-          "x": 0.49603174603174605,
-          "y": 0.637883008356546,
-          "uniqueID": "id-610",
-          "ioValues": [
-            {
-              "name": "width",
-              "ioValue": 500
-            },
-            {
-              "name": "height",
-              "ioValue": 500
-            },
-            {
-              "name": "cornerRadius",
-              "ioValue": 100
-            }
-          ],
-          "interpreterVersion": 1,
-          "code": "function run(\n  width: number = 40,\n  height: number = 30,\n  cornerRadius: number = 5,\n): Assembly {\n  // Create a 2D rounded rectangle sketch\n  const roundedRect = replicad.drawRoundedRectangle(width, height, cornerRadius);\n\n  return new Assembly({\n    geometry: roundedRect,\n    tags: [\"rounded-rectangle\", \"2d\"],\n    bom: [`Rounded rectangle ${width}×${height} mm, r=${cornerRadius} mm`],\n  });\n}",
-          "compiledCode": "\"use strict\";\nfunction run(width = 40, height = 30, cornerRadius = 5) {\n    // Create a 2D rounded rectangle sketch\n    const roundedRect = replicad.drawRoundedRectangle(width, height, cornerRadius);\n    return new Assembly({\n        geometry: roundedRect,\n        tags: [\"rounded-rectangle\", \"2d\"],\n        bom: [`Rounded rectangle ${width}×${height} mm, r=${cornerRadius} mm`],\n    });\n}\n"
-        }
-      ],
-      "allConnectors": [
-        {
-          "ap2Name": "width",
-          "ap1ID": "id-607",
-          "ap2ID": "id-610"
-        },
-        {
-          "ap2Name": "height",
-          "ap1ID": "id-608",
-          "ap2ID": "id-610"
-        },
-        {
-          "ap2Name": "cornerRadius",
-          "ap1ID": "id-609",
-          "ap2ID": "id-610"
-        },
-        {
-          "ap2Name": "number or geometry",
-          "ap1ID": "id-610",
-          "ap2ID": "id-606"
-        }
-      ],
-      "parentRepo": {
-        "lastFoundGit": "2026-07-19T02:23:39.092Z",
-        "privateRepo": false,
-        "repoName": "Rounded_Rectangle",
-        "dateCreated": "2026-06-24T22:02:13Z",
-        "likes": 0,
-        "readMe": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/README.md?sanitize=true",
-        "yyyy": 2026,
-        "topMoleculeID": "id-460774",
-        "githubMoleculesUsed": [],
-        "html_url": "https://github.com/BarbourSmith/Rounded_Rectangle",
-        "topics": [],
-        "parentRepo": null,
-        "forks": 0,
-        "dateModified": "739791",
-        "ranking": 2.1,
-        "searchField": "rounded_rectangle barboursmith creates a 2d rectangle with rounded corners  ",
-        "owner": "BarbourSmith",
-        "description": "Creates a 2D rectangle with rounded corners ",
-        "contentURL": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/project.abundance?sanitize=true",
-        "svgURL": "https://raw.githubusercontent.com/BarbourSmith/Rounded_Rectangle/master/project.svg?sanitize=true",
-        "isLocal": false
-      },
-      "unitsKey": "Unitless",
-      "fileTypeVersion": 1,
-      "lastReloadedFromGithubAt": 1784435795517
     }
   ],
   "allConnectors": [
@@ -227,7 +97,7 @@
     },
     {
       "ap2Name": "shape",
-      "ap1ID": "id-611",
+      "ap1ID": "id-598",
       "ap2ID": "id-587"
     }
   ],
